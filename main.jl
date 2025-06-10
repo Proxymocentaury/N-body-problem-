@@ -37,5 +37,3 @@ stato_finale=simulazione_nostop(t_parm, tmax, mass, coord, vel, N_dt, check_freq
 crea_gif_2d("data_output.jld2", "output.gif", 30, 1.1)
 
 #@time A = simulazione_nostop(t_parm, tmax, mass, coord, vel, N_dt, check_freq,snapshot_freq)
-#@show sum(1.0./abs.(stato_finale[:, 2]))
-
