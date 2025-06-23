@@ -1,7 +1,6 @@
-include("nbodylib2.jl")  # liberia che calcola accelerazioni e jerk insieme (velocizza l'esecuzione)
+include("nbodylib.jl")  # liberia che calcola accelerazioni e jerk insieme (velocizza l'esecuzione)
 #include("nbodylibMT.jl") # liberia che sfrutta la parallelizzazione (avviare con:  julia -t 2 main.jl ) 
-#include("nbodylibMT4.jl") # liberia che sfrutta la parallelizzazione (calcola t_coll acc e jerck insieme)
-include("read.jl") 
+include("anima.jl") 
 
 #-------------------------simulazioni-------------------------------
 
