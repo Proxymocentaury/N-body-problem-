@@ -10,6 +10,24 @@ using JLD2
 #GESTIONE LETTURA E SCRITTURA DATI
 #######################
 
+
+function prelevo_dati_csv()
+
+    # Leggi il file CSV senza intestazioni
+    df = CSV.read("data.csv", DataFrame, header=false)
+
+    data_matrix = Matrix(df)  # Converte il DataFrame in una matrice
+
+    mass = data_matrix[:, 1]   
+    coord = data_matrix[:, 2:4] 
+    vel = data_matrix[:, 5:7] 
+
+    return mass, coord, vel
+    
+end
+
+
+
 function prelevo_dati_csv_MT(file::String)
     df = CSV.read(file, DataFrame, header=false)
     data_matrix = Matrix(df)
@@ -50,9 +68,8 @@ end
 
 function calcolo_Ek(mass, vel)
     N = length(mass)
-    # Ek = Threads.Atomic{Float64}(0.0)
-    # Ek = 0.0
     Ekt = zeros(Threads.nthreads())
+    
     @threads for i in 1:N
         # Threads.atomic_add!(Ek, 0.5 * mass[i] * sum(vel[i, :] .^ 2))
         Ekt[Threads.threadid()] += 0.5 * mass[i] * sum(vel[i, :] .^ 2)
@@ -262,20 +279,28 @@ function predict_stept(t_parm, mass,coord, vel)
 end
 
 
-function correct_stept(dt, mass, coord_old, vel_old, coord_new ,vel_new, acc_old, jerk_old)
 
-    N = size(coord, 1)
-    acc_new, jerk_new = calcolo_tcoll_acc_jerk_bool(mass, coord_old, vel_old, false)
+function correct_stept(dt, mass, coord_old, vel_old, coord_pred, vel_pred, acc_old, jerk_old)
+    N = size(coord_old, 1)
+    
+    # Calculate forces at predicted positions (this is key!)
+    acc_new, jerk_new = calcolo_tcoll_acc_jerk_bool(mass, coord_pred, vel_pred, false)
+    
+    coord_new = zeros(N, 3)
+    vel_new = zeros(N, 3)
     
     @threads for i in 1:N
-        vel_new[i, :] .= vel_old[i, :] .+ 1/2 * (acc_new[i, :] + acc_old[i, :]) * dt .+ 1/12 * (-jerk_new[i, :] + jerk_old[i, :]) * dt^2
-        coord_new[i, :] .= coord_old[i, :] .+ vel_old[i, :] * dt .+ 1/4 * (acc_new[i, :] + acc_old[i, :]) * dt^2 .- 1/12 * jerk_new[i, :] * dt^3
+        # Corrector step
+        vel_new[i, :] = vel_old[i, :] + 0.5 * (acc_new[i, :] + acc_old[i, :]) * dt + 
+                       (1.0/12.0) * (jerk_old[i, :] - jerk_new[i, :]) * dt^2
+        
+        coord_new[i, :] = coord_old[i, :] + vel_old[i, :] * dt + 
+                         0.25 * (acc_new[i, :] + acc_old[i, :]) * dt^2 - 
+                         (1.0/12.0) * jerk_new[i, :] * dt^3
     end
-
-    return coord_new, vel_new
-
+    
+    return coord_new, vel_new, acc_new, jerk_new
 end
-
 
 
 
@@ -356,8 +381,15 @@ function simulazione_break(t_parm, tmax, mass, coord, vel, N_dt, check_freq, sna
             dt, new_coord, new_vel, acc, jerk = predict_stept(t_parm, mass,coord, vel)
             coord, vel = correct_stept(dt, mass, coord, vel, new_coord ,new_vel, acc, jerk)
 
+            coord_prec = copy(coord)
+            vel_prec = copy(vel)
+            t_prec = t 
+
+            
             ti +=1
             t +=dt
+
+            
 
             E = calcolo_Etot(mass, coord, vel)
             E_err = abs((E - Ein) / Ein)
