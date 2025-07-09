@@ -3,24 +3,23 @@ using DelimitedFiles
 using LinearAlgebra
 
 
+
 ################################################
 # funzioni per la lettura e scrittura dei dati 
 ################################################
 
 # funzione per prelevare i dati da un file csv
-function prelevo_dati_csv()
-
+function prelevo_dati_csv(filename::String)
     # Leggi il file CSV senza intestazioni
-    df = CSV.read("data.csv", DataFrame, header=false)
+    df = CSV.read(filename, DataFrame; header=false)
 
-    data_matrix = Matrix(df)  # Converte il DataFrame in una matrice
+    data_matrix = Matrix(df)  
 
-    mass = data_matrix[:, 1]   
-    coord = data_matrix[:, 2:4] 
-    vel = data_matrix[:, 5:7] 
+    mass = data_matrix[:, 1]        
+    coord = data_matrix[:, 2:4]     
+    vel = data_matrix[:, 5:7]       
 
     return mass, coord, vel
-    
 end
 
 
@@ -100,7 +99,7 @@ function calcolo_Ep(mass, coord)
 
     for i in 1:N-1
         for j in i+1:N
-            p+= -G*mass[i]*mass[j]/( sqrt(sum((coord[i, :] - coord[j, :]) .^ 2)) )
+            p+= -mass[i]*mass[j]/( sqrt(sum((coord[i, :] - coord[j, :]) .^ 2)) )
         end
         
     end
@@ -148,13 +147,13 @@ function diagnostica(Ein, E)
 end
 
 
-# funzione per calcolare  accelerazioni che i jerk
+# funzione combinata per calcolare sia le accelerazioni che i jerk
 function calcolo_acc_jerk(mass, coord, vel)
     N = length(mass)
     acc = zeros(N, 3)
     jerk = zeros(N, 3)
 
-    #
+    # Calcola le accelerazioni e i jerk in un'unica iterazione
     for i in 1:N
         for k in 1:N
             if k != i
@@ -235,7 +234,7 @@ function simulazione_nostop(t_parm, tmax, mass, coord, vel,  N_dt, check_freq, s
     acc, jerk = calcolo_acc_jerk(mass, coord, vel)
 
     Ein= calcolo_Ek(mass, vel) + calcolo_Ep(mass, coord) # energia totale del sistema allo stato iniziale
- 
+    println("Energia iniziale: ", Ein)
 
     t = 0  
     ti = 0  
@@ -259,7 +258,7 @@ function simulazione_nostop(t_parm, tmax, mass, coord, vel,  N_dt, check_freq, s
             if ti % check_freq == 0
                 E = calcolo_Ek(mass, vel_new) + calcolo_Ep(mass, coord_new)
                 E_err=abs( (E-Ein)/Ein )
-                println("tempo: $t, energia: $E, (energia stato iniziale) $Ein,  errore energia: $E_err")
+                println("tempo: $t, passo: $ti, energia: $E,  errore energia: $E_err")
             end
 
             if ti % snapshot_freq == 0
@@ -289,7 +288,7 @@ function simulazione_break(t_parm, tmax, mass, coord, vel,  N_dt, errore_soglia,
     acc, jerk = calcolo_acc_jerk(mass, coord, vel)
 
     Ein= calcolo_Ek(mass, vel) + calcolo_Ep(mass, coord) # energia totale del sistema allo stato iniziale
- 
+    println("Energia iniziale: ", Ein)
 
     t = 0  
     ti = 0  
@@ -315,7 +314,7 @@ function simulazione_break(t_parm, tmax, mass, coord, vel,  N_dt, errore_soglia,
 
             if E_err >= errore_soglia  
                 println("Errore sopra soglia! Terminazione anticipata al passo $ti.")
-                println("tempo: $t, energia: $E, (energia stato iniziale) $Ein,  errore energia: $E_err")
+                println("tempo: $t, passo: $ti, energia: $E,  errore energia: $E_err")
                 A=hcat(mass, coord, vel) 
                 io["snapshot_$ti"] = (t=t, A=A)
                 return  A 
@@ -326,7 +325,7 @@ function simulazione_break(t_parm, tmax, mass, coord, vel,  N_dt, errore_soglia,
             if ti % check_freq == 0
                 E = calcolo_Ek(mass, vel_new) + calcolo_Ep(mass, coord_new)
                 E_err=abs( (E-Ein)/Ein )
-                println("tempo: $t, energia: $E, (energia stato iniziale) $Ein,  errore energia: $E_err")
+                println("tempo: $t, passo: $ti, energia: $E,  errore energia: $E_err")
             end
 
             if ti % snapshot_freq == 0
@@ -350,60 +349,10 @@ function simulazione_break(t_parm, tmax, mass, coord, vel,  N_dt, errore_soglia,
 end
 
 
-# simulazione creata in modo tale che l'errore dell'energia non superi il valore soglia
-function simulazione_autocorrect(t_parm, tmax, mass, coord, vel, N_dt, errore_soglia, snapshot_freq)
+
+function simulazione_con_ricalcolo_adattivo(t_parm, tmax, mass, coord, vel, N_dt, soglia_err, snapshot_freq, rid)
     acc, jerk = calcolo_acc_jerk(mass, coord, vel)
-    Ein = calcolo_Etot(mass, coord, vel)
-
-    t = 0
-    ti = 0
-    E_start = Ein
-    E = Ein
-
-    coord_new, vel_new, acc_new, jerk_new = coord, vel, acc, jerk
-    A = hcat(mass, coord, vel)
-
-    jldopen("data_output.jld2", "w") do io
-        io["snapshot_0"] = (t=t, A=A)
-
-        while ti < N_dt && t < tmax
-            dt = calcolo_tcoll(coord, vel, acc) * t_parm
-
-            # questo ciclo, dimezza il passo temporale finché l'errore dell'energia è inferiore all'errore soglia
-            while diagnostica(E_start, E) > errore_soglia
-                dt *= 0.5
-                coord_new, vel_new, acc_new, jerk_new = evolve_step(dt, mass, coord, vel, acc, jerk)
-                E = calcolo_Etot(mass, coord_new, vel_new)
-            end
-
-            coord_new, vel_new, acc_new, jerk_new = evolve_step(dt, mass, coord, vel, acc, jerk)
-            E = calcolo_Etot(mass, coord_new, vel_new)
-
-            coord, vel, acc, jerk = coord_new, vel_new, acc_new, jerk_new
-            ti += 1
-            t += dt
-
-            if ti % snapshot_freq == 0
-                A = hcat(mass, coord, vel)
-                io["snapshot_$ti"] = (t=t, A=A)
-                println("tempo: $t, energia: $E, errore energia: $(diagnostica(Ein, E))")
-            end
-        end
-
-        println("\nrisultati finali")
-        println("passo $ti: Errore energia: $(diagnostica(Ein, E)), dt = $dt")
-        println("tempo: $t")
-        A = hcat(mass, coord, vel)
-        io["final_snapshot"] = (t=t, A=A)
-    end
-
-    return hcat(mass, coord, vel)
-end
-
-
-function simulazione_con_ricalcolo(t_parm, tmax, mass, coord, vel, N_dt, soglia_err, snapshot_freq)
-    acc, jerk = calcolo_acc_jerk(mass, coord, vel)
-    Ein = calcolo_Etot(mass, coord, vel)
+    Ein = calcolo_Ek(mass, vel) + calcolo_Ep(mass, coord)
 
     t = 0
     ti = 0
@@ -422,92 +371,39 @@ function simulazione_con_ricalcolo(t_parm, tmax, mass, coord, vel, N_dt, soglia_
             ti += 1
             t += dt
 
-            E = calcolo_Etot(mass, coord_new, vel_new)
+            E = calcolo_Ek(mass, vel) + calcolo_Ep(mass, coord)
             err = diagnostica(Ein, E)
 
-            # Ricalcola finché l'errore non è accettabile
+            # Se l'errore è troppo grande, si riduce il passo (con un fattore di riduzione)
             while err > soglia_err
-                dt /= 2  # Dimezza il tempo dello step
-                coord_new, vel_new, acc_new, jerk_new = evolve_step(dt, mass, coord, vel, acc, jerk)
-                coord, vel, acc, jerk = coord_new, vel_new, acc_new, jerk_new
-                t += dt  # Aggiungi il nuovo dt al tempo totale
-
-                # Ricalcola energia e errore con il nuovo passo
-                E = calcolo_Etot(mass, coord_new, vel_new)
-                err = diagnostica(Ein, E)
-            end
-
-            # Altrimenti, salva lo stato e continua
-            if ti % snapshot_freq == 0
-                A = hcat(mass, coord, vel)
-                io["snapshot_$ti"] = (t=t, A=A)
-                println("tempo: $t, energia: $E, errore energia: $err")
-            end
-        end
-
-        println("\nrisultati finali")
-        E = calcolo_Etot(mass, coord_new, vel_new)
-        println("tempo: $t, passo: $ti")
-        err = diagnostica(Ein, E)
-        println("errore relativo dell'energia: $err")
-
-        A = hcat(mass, coord, vel)
-        io["final_snapshot"] = (t=t, A=A)
-    end
-
-    return A
-end
-
-
-function simulazione_con_ricalcolo_adattivo(t_parm, tmax, mass, coord, vel, N_dt, soglia_err, snapshot_freq, rid=2.0, dt_min=1e-10)
-    acc, jerk = calcolo_acc_jerk(mass, coord, vel)
-    Ein = calcolo_Etot(mass, coord, vel)
-
-    t = 0
-    ti = 0
-
-    coord_new, vel_new, acc_new, jerk_new = coord, vel, acc, jerk
-    A = hcat(mass, coord, vel)
-
-    jldopen("data_output.jld2", "w") do io
-        io["snapshot_0"] = (t=t, A=A)
-
-        while ti < N_dt && t < tmax
-            dt = calcolo_tcoll(coord, vel, acc) * t_parm
-            coord_new, vel_new, acc_new, jerk_new = evolve_step(dt, mass, coord, vel, acc, jerk)
-
-            coord, vel, acc, jerk = coord_new, vel_new, acc_new, jerk_new
-            ti += 1
-            t += dt
-
-            E = calcolo_Etot(mass, coord_new, vel_new)
-            err = diagnostica(Ein, E)
-
-            # Se l'errore è troppo grande, riduci il passo (con un fattore di riduzione)
-            while err > soglia_err
-                println("\nErrore superiore alla soglia ($err > $soglia_err), ricalcolando con step ridotto.")
-                dt *= 1 / rid  # Riduci il passo
-                dt = max(dt, dt_min)
+                
+                dt *=  rid  # Riduci il passo
 
                 coord_new, vel_new, acc_new, jerk_new = evolve_step(dt, mass, coord, vel, acc, jerk)
                 coord, vel, acc, jerk = coord_new, vel_new, acc_new, jerk_new
-                t += dt  # Aggiungi il nuovo dt al tempo totale
+                t += dt  
 
                 # Ricalcola energia e errore con il nuovo passo
-                E = calcolo_Etot(mass, coord_new, vel_new)
+                E = calcolo_Ek(mass, vel_new) + calcolo_Ep(mass, coord_new)
                 err = diagnostica(Ein, E)
             end
 
-            # Salva lo stato e continua
+            
             if ti % snapshot_freq == 0
                 A = hcat(mass, coord, vel)
                 io["snapshot_$ti"] = (t=t, A=A)
-                println("tempo: $t, energia: $E, errore energia: $err")
             end
+
+            if ti % check_freq == 0
+                E = calcolo_Ek(mass, vel_new) + calcolo_Ep(mass, coord_new)
+                E_err=abs( (E-Ein)/Ein )
+                println("tempo: $t, passo: $ti, energia: $E,  errore energia: $E_err")
+            end
+
         end
 
         println("\nrisultati finali")
-        E = calcolo_Etot(mass, coord_new, vel_new)
+        E = calcolo_Ek(mass, vel_new) + calcolo_Ep(mass, coord_new)
         println("tempo: $t, passo: $ti")
         err = diagnostica(Ein, E)
         println("errore relativo dell'energia: $err")
