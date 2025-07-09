@@ -71,7 +71,6 @@ function calcolo_Ek(mass, vel)
     Ekt = zeros(Threads.nthreads())
     
     @threads for i in 1:N
-        # Threads.atomic_add!(Ek, 0.5 * mass[i] * sum(vel[i, :] .^ 2))
         Ekt[Threads.threadid()] += 0.5 * mass[i] * sum(vel[i, :] .^ 2)
     end
 
@@ -432,6 +431,63 @@ function simulazione_break(t_parm, tmax, mass, coord, vel, N_dt, check_freq, sna
 
 
     return A  
+end
+
+
+
+function simulazione_con_ricalcolo_adattivo(t_parm, tmax, mass, coord, vel, N_dt, errore_soglia, check_freq, snapshot_freq, rid)
+    Ein = calcolo_Etot(mass, coord, vel)
+    println("Energia iniziale: ", Ein)
+
+    t = 0.0
+    ti = 0
+    dt = 0.0
+    A = hcat(mass, coord, vel)
+
+    jldopen("data_output.jld2", "w") do io
+        io["snapshot_0"] = (t=t, A=A)
+
+        while ti < N_dt && t < tmax
+            dt, new_coord, new_vel, acc, jerk = predict_stept(t_parm, mass, coord, vel)
+            coord_new, vel_new, acc_new, jerk_new = correct_stept(dt, mass, coord, vel, new_coord, new_vel, acc, jerk)
+
+            E = calcolo_Etot(mass, coord_new, vel_new)
+            E_err = abs((E - Ein) / Ein)
+        
+
+            # Se errore energia sopra soglia assoluta o rispetto al passo precedente, riduci dt
+            if (E_err > errore_soglia)
+                dt *= rid
+                #println("Errore energia sopra soglia! Riduzione dt a $dt (t=$t, passo=$ti, E_err=$E_err, E_diff=$E_diff)")
+                continue
+            end
+
+            # Aggiorna stato solo se errore ok
+            coord, vel = coord_new, vel_new
+            t += dt
+            ti += 1
+
+            if ti % check_freq == 0
+                println("tempo: $t, passo: $ti, energia: $E, errore energia: $E_err")
+            end
+
+            if ti % snapshot_freq == 0
+                A = hcat(mass, coord, vel)
+                io["snapshot_$ti"] = (t=t, A=A)
+            end
+        end
+
+        A = hcat(mass, coord, vel)
+        io["final_snapshot"] = (t=t, A=A)
+    end
+
+    println("\nrisultati finali")
+    E = calcolo_Etot(mass, coord, vel)
+    println("tempo: $t, passo: $ti")
+    err = diagnostica(Ein, E)
+    println("errore relativo dell'energia: $err")
+
+    return A
 end
 
 
