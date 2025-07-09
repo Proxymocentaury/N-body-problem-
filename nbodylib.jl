@@ -2,12 +2,6 @@ using CSV, JLD2, DataFrames
 using DelimitedFiles
 using LinearAlgebra
 
-###############################
-#Forse sarebbe meglio mettere G=1 ?
-###############################
-
-G = 1 #6.67430e-11
-
 
 ################################################
 # funzioni per la lettura e scrittura dei dati 
@@ -154,13 +148,13 @@ function diagnostica(Ein, E)
 end
 
 
-# funzione combinata per calcolare sia le accelerazioni che i jerk
+# funzione per calcolare  accelerazioni che i jerk
 function calcolo_acc_jerk(mass, coord, vel)
     N = length(mass)
     acc = zeros(N, 3)
     jerk = zeros(N, 3)
 
-    # Calcola le accelerazioni e i jerk in un'unica iterazione
+    #
     for i in 1:N
         for k in 1:N
             if k != i
@@ -171,11 +165,11 @@ function calcolo_acc_jerk(mass, coord, vel)
 
                 if r2 > 0
                     # Calcola l'accelerazione per la particella i dovuta alla particella k
-                    acc[i, :] += G * mass[k] * r_ij / r2^1.5
+                    acc[i, :] += mass[k] * r_ij / r2^1.5
 
                     # Calcola il termine di jerk per la particella i dovuto alla particella k
                     v_rad = dot(r_ij, v_ij)  # Velocità radiale relativa
-                    jerk[i, :] += G * mass[k] * (v_ij / r^3 - 3 * v_rad * r_ij / r^5)
+                    jerk[i, :] += mass[k] * (v_ij / r^3 - 3 * v_rad * r_ij / r^5)
                 end
             end
         end
