@@ -1,6 +1,5 @@
 include("nbodylib.jl")  
 #include("nbodylibMT.jl") # liberia che sfrutta la parallelizzazione (avviare con:  julia -t n main.jl ) 
-include("anima.jl") 
 
 
 t_parm= 1e-3
@@ -20,6 +19,4 @@ mass, coord, vel= prelevo_dati_csv()
 
 stato_finale=simulazione_nostop(t_parm, tmax, mass, coord, vel, N_dt, check_freq, snapshot_freq)
 #println(stato_finale)
-
-crea_gif_2d("data_output.jld2", "output.gif", 30, 1.1)
 
