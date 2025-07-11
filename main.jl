@@ -1,8 +1,7 @@
 include("nbodylib.jl")  
 #include("nbodylibMT.jl") # liberia che sfrutta la parallelizzazione (avviare con:  julia -t n main.jl ) 
 
-
-t_parm= 1e-3
+t_parm= 1e-3 #parametro temporale per determinare la precisione della simulazione
 
 N_dt= 10e12 # numero passi massimi della simulazione
 tmax= 2*pi  # tempo massimo della simulazione 
