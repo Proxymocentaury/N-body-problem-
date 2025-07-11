@@ -12,11 +12,8 @@ check_freq= 1e3 #indica ogni quanti passi viene stampato il tempo e l'energia
 
 errore_soglia= 1e-3
 
-
-# --------- estrazioni dei dati ------------
-
-mass, coord, vel= prelevo_dati_csv() 
+mass, coord, vel= prelevo_dati_csv( "dat.csv" ) # estrazione dei dati
 
 stato_finale=simulazione_nostop(t_parm, tmax, mass, coord, vel, N_dt, check_freq, snapshot_freq)
-#println(stato_finale)
+println(stato_finale)
 
