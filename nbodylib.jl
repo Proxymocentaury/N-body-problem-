@@ -282,7 +282,7 @@ function simulazione_nostop(t_parm, tmax, mass, coord, vel,  N_dt, check_freq, s
 end
 
 
-#simulazione: porta a termine i calcoli fino al tempo richiesto
+#simulazione che restituisce risultati con un errore tollerabile
 function simulazione_break(t_parm, tmax, mass, coord, vel,  N_dt, errore_soglia, check_freq, snapshot_freq)
 
     acc, jerk = calcolo_acc_jerk(mass, coord, vel)
